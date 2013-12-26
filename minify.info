@@ -1,0 +1,4 @@
+name = "Minify"
+description = "Provides a mechanism to Minify HTML, JS."
+package = Performance and scalability
+core = 7.x
