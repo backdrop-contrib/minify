@@ -196,25 +196,11 @@ function _minify_html_html_comment($string) {
 }
 
 /*
- * Helper function to add place holder for <textarea> tag
+ * Helper function to add place holder for <textarea> and <pre> tag
  */
 function _minify_html_callback($m){
   return _minify_reserve_place($m[0]);
 }
- 
-/*
- * Helper function to add place holder for <textarea> tag
- */
-// function _minify_remove_textarea_callback($m){
-  // return _minify_reserve_place("<textarea{$m[1]}");
-// }
-
-/*
- * Helper function to add place holder for <pre> tag
- */
-// function _minify_remove_pre_callback($m) {
-  // return _minify_reserve_place("<pre{$m[1]}");
-// }
 
 /*
  * Helper function to add place holder for <iframe> tag
@@ -229,10 +215,11 @@ function _minify_html_iframe_callback($m) {
  */
 function _minify_html_script_callback($m) {
 	$search = array(
-		'!/\*.*?\*/!s',   // remove multiline comment
-		'/^\\s+|\\s+$/m'  // trim each line
+		'!/\*.*?\*/!s',     // remove multi-line comment
+    '/^\\s+|\\s+$/m',   // trim each line
+		'/\n(\s*\n)+/',     // remove multiple empty line
 	);
-	$replace = array('');
+	$replace = array('', "\n", "\n");
 	$script = preg_replace($search, $replace, $m[0]);
   
 	return _minify_reserve_place($script);
