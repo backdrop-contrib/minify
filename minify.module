@@ -313,12 +313,9 @@ function _minify_javascript_exist($search_value, $cache) {
 
 
 /**
- *
+ * Helper function to check file version is same
  */
 function _minify_file_version_same($file_details, $cache_details) {
-  /*if (!isset($file_details['version']) || !isset($cache_details['version'])) {
-  }*/
-
   return (isset($file_details['version']) && isset($cache_details['version']))
     ? ( ($file_details['version'] == $cache_details['version']) ? true : false) 
     : false;
@@ -338,12 +335,12 @@ function _minify_replace_array_key($array, $old_key, $new_key) {
 }
 
 
+/**
+ * Implements hook_cron().
+ */
 function minify_cron() {
-//echo "<pre>"; print_r( drupal_add_js() ); exit;
   $cache = variable_get('minify_captured_js', array());
   $scripts = drupal_add_js();
-
-watchdog('$scripts', '<pre>@data</pre>', array('@data' => print_r($scripts, true)));
 
   foreach ($scripts as $file_path => $file_details) {
     /* Set JavaScript entry into cache array if it not exist in cache */
