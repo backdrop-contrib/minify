@@ -333,20 +333,3 @@ function _minify_replace_array_key($array, $old_key, $new_key) {
   }
   return $array;
 }
-
-
-/**
- * Implements hook_cron().
- */
-function minify_cron() {
-  $cache = variable_get('minify_captured_js', array());
-  $scripts = drupal_add_js();
-
-  foreach ($scripts as $file_path => $file_details) {
-    /* Set JavaScript entry into cache array if it not exist in cache */
-    if ('file' == $file_details['type'] && isset($cache[$file_path])) {
-      $cache[$file_path]['version'] = isset($file_details['version']) ? $file_details['version'] : '';
-    }
-  }
-
-}
