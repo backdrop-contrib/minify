@@ -2,3 +2,4 @@ name = "Minify"
 description = "Provides a mechanism to minify HTML and JavaScript files."
 package = Performance and scalability
 core = 7.x
+configure = admin/config/development/performance/default
