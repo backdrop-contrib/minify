@@ -4,10 +4,6 @@
  * Menu callback to generate overview form
  */
 function minify_js_callback() {
-  if (!function_exists('curl_init')) {
-    form_set_error('null', t('CURL library not available. In order to use Minify please install CURL library.'));
-  }
-
   _minify_clear_invalid_cache();
 
   $cache = variable_get('minify_captured_js', array());
@@ -85,8 +81,8 @@ function _minify_file_name($details) {
 
 function _minify_file_path_links($details) {
   return l('Original', $details['file_path'], array('attributes' => array('target' => '_blank', 'title' => $details['file_path'])))
-    . (($details['status']) 
-      ? (' | ' . l('Minified', $details['minified_file_path'], array('attributes' => array('target' => '_blank', 'title' => $details['minified_file_path'])))) 
+    . (($details['status'])
+      ? (' | ' . l('Minified', $details['minified_file_path'], array('attributes' => array('target' => '_blank', 'title' => $details['minified_file_path']))))
       : ''
     );
 }
@@ -95,18 +91,18 @@ function _minify_file_path_links($details) {
  * Helper function to construct operation links
  */
 function _minify_operation_links($details) {
-  $refresh_link = l('Refresh', 
-    'admin/config/development/performance/minifyjs/refresh', 
+  $refresh_link = l('Refresh',
+    'admin/config/development/performance/minifyjs/refresh',
     array('query' => array('file' => $details['file_path']), 'attributes' => array('title' => 'Refresh/regenerate the minified JS file.'))
   );
 
-  $revert_link = l('Revert', 
-    'admin/config/development/performance/minifyjs/revert', 
+  $revert_link = l('Revert',
+    'admin/config/development/performance/minifyjs/revert',
     array('query' => array('file' => $details['file_path']), 'attributes' => array('title' => 'Delete the minified file and use original file.'))
   );
 
-  $minify = l('Minify', 
-    'admin/config/development/performance/minifyjs/refresh', 
+  $minify = l('Minify',
+    'admin/config/development/performance/minifyjs/refresh',
     array('query' => array('file' => $details['file_path']), 'attributes' => array('title' => 'Minify it.')));
 
   return ($details['status']) ? ($refresh_link . ' | ' . $revert_link) : $minify;
@@ -282,18 +278,18 @@ function _minify_get_post_fields($js_code) {
 }
 
 /**
- * Helper function to send CURL request
+ * Helper function to send request.
  */
 function _minify_send_request($post_data) {
-  if (function_exists('curl_init')) {
-    $curl = curl_init();
-    curl_setopt($curl, CURLOPT_URL, "https://closure-compiler.appspot.com/compile");
-    curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($curl, CURLOPT_POSTFIELDS, $post_data);
-    curl_setopt($curl, CURLOPT_POST, true);
-    $response = json_decode(curl_exec($curl));
-    $httpcode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-    curl_close($curl);
+  $options = array(
+    'method' => 'POST',
+    'data' => $post_data,
+    'headers' => array('Content-Type' => 'application/x-www-form-urlencoded'),
+  );
+  $result = drupal_http_request('http://closure-compiler.appspot.com/compile', $options);
+  if (!isset($result->error)) {
+    $response = json_decode($result->data);
+    $httpcode = $result->code;
     return array('response' => $response, 'http_code' => $httpcode);
   }
 }
@@ -320,7 +316,7 @@ function _minify_construct_min_js_path($script, $cache_data) {
 
     $min_file_name = implode('.', array_filter(array($file_name, trim($version), 'min', $file_ext)));
     $min_file_path = $minify_js_dir . $min_file_name;
-    
+
     $min_file_path = file_destination($min_file_path, FILE_EXISTS_RENAME);
     return $min_file_path;
   }
