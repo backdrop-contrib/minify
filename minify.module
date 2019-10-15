@@ -244,6 +244,11 @@ function _minify_reserve_place($content) {
  * Implements hook_js_alter().
  */
 function minify_js_alter(&$scripts) {
+  $minify_js = variable_get('minify_js', 0);
+  if (!$minify_js) {
+    return;
+  }
+
   $cache = variable_get('minify_captured_js', array());
 
   $updated = false;
