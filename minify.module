@@ -234,7 +234,8 @@ function _minify_html_style_callback($m) {
  */
 function _minify_reserve_place($content) {
   global $placeholders;
-  $placeholder = '%' . REPLACEMENT_HASH . count($placeholders) . '%';
+  $placeholder_count = is_array($placeholders) ? count($placeholders) : 0;
+  $placeholder = '%' . REPLACEMENT_HASH . $placeholder_count . '%';
   $placeholders[$placeholder] = $content;
   return $placeholder;
 }
