@@ -1,0 +1,7 @@
+{
+    "_config_name": "minify.settings",
+    "_module": "minify",
+    "minify_html": 0,
+    "minify_js": 0,
+    "minify_captured_js": []
+}

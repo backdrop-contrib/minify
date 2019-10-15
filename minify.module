@@ -1,20 +1,20 @@
 <?php
+/**
+ * Provides a mechanism to minify HTML and JavaScript files.
+ */
 
 /**
- * Implements hook_help().
+ * Implements hook_config_info().
  */
-function minify_help($path, $arg) {
-  switch ($path) {
-    case 'admin/config/development/performance/minifyjs':
-      $output = '<p>' . t('This is a simple module that provides the mechanism to minify JavaScript files, ');
-      $output .= t('which ultimately reduces the file size and load time.') . '</p>';
-      $output .= '<p>' . t('In <b>Operations</b> column,<br /><b>Minify</b> => Generate the minified version,<br />');
-      $output .= t('<b>Refresh</b> => Refresh/regenerate the minified version,<br />');
-      $output .= t('<b>Revert</b> => Delete the minified file and use original file.') . '</p>';
-      $output .= '<p>' . t('In <b>Status</b> column,<br />');
-      $output .= t('<span class="marker">Need to refresh</span> => Original file is updated, click Refresh to update minified file.') . '</p>';
-    return $output;
-  }
+function minify_config_info() {
+  // If this configuration file points to one particular file, a "name" key
+  // will display that exact string for that file.
+  $prefixes['minify.settings'] = array(
+    'label' => t('Minify Settings'),
+    'group' => t('Configuration'),
+  );
+
+  return $prefixes;
 }
 
 /**
@@ -29,7 +29,7 @@ function minify_menu() {
   $items['admin/config/development/performance/minifyjs'] = array(
     'title' => 'Minify JavaScript files',
     'access arguments' => array('administer minify'),
-    'page callback' => 'drupal_get_form',
+    'page callback' => 'backdrop_get_form',
     'page arguments' => array('minify_js_callback'),
     'type' => MENU_LOCAL_TASK,
     'weight' => 2,
@@ -38,14 +38,14 @@ function minify_menu() {
   $items['admin/config/development/performance/minifyjs/revert'] = array(
     'title' => 'Revert Minify JS',
     'access arguments' => array('administer minify'),
-    'page callback' => '_minify_js_revert_callback',
+    'page callback' => 'minify_js_revert_callback',
     'file' => 'minify.admin.inc',
     'type' => MENU_CALLBACK,
   );
   $items['admin/config/development/performance/minifyjs/refresh'] = array(
     'title' => 'Minify JS',
     'access arguments' => array('administer minify'),
-    'page callback' => '_minify_js_refresh_callback',
+    'page callback' => 'minify_js_refresh_callback',
     'file' => 'minify.admin.inc',
     'type' => MENU_CALLBACK,
   );
@@ -73,29 +73,45 @@ function minify_permission() {
 function minify_form_system_performance_settings_alter(&$form, &$form_state, $form_id) {
   if (user_access('administer minify')) {
     $m_cnt = 0;
-    $cache = variable_get('minify_captured_js', array());
+    $config = config('minify.settings');
+    $cache = $config->get('minify_captured_js');
     foreach ($cache as $key => $value) {
       if ($cache[$key]['status']) {
         $m_cnt++;
       }
     }
-    $description = t('Select <b>Minify JavaScript files</b> tab at top of the page or ')
-      . l('Click here', 'admin/config/development/performance/minifyjs')
-      . t(' to manage minified JavaScript files.')
-      . t('<br />Out of <b>@cnt</b> only <b>@m_cnt</b> JavaScript files are minified.', array('@cnt' => count($cache), '@m_cnt' => $m_cnt));
 
     $form['bandwidth_optimization']['minify_html'] = array(
       '#type' => 'checkbox',
       '#title' => t('Minify HTML.'),
-      '#default_value' => intval(variable_get('minify_html', 0)),
+      '#default_value' => intval($config->get('minify_html')),
     );
+
+    $description =  t('Currently <b>@m_cnt</b> of <b>@cnt</b> JavaScript files have been minified.', array('@cnt' => count($cache), '@m_cnt' => $m_cnt));
+    $description .= ' ' . l(t('Manage'), 'admin/config/development/performance/minifyjs', array('attributes' => array('class' => array('button'))));
+    $disabled = FALSE;
+    if (!$m_cnt) {
+      $disabled = TRUE;
+      $description .= t('At least 1 JavaScript file must be minified before this setting is active.');
+    }
+
     $form['bandwidth_optimization']['minify_js'] = array(
       '#type' => 'checkbox',
       '#title' => t('Use Minified JavaScript files.'),
       '#description' => $description,
-      '#default_value' => intval(variable_get('minify_js', 0)),
+      '#default_value' => intval($config->get('minify_js')),
+      '#disabled' => $disabled,
     );
+
+    $form['#submit'][] = 'minify_settings_submit';
   }
+}
+
+function minify_settings_submit(&$form, &$form_state) {
+  $config = config('minify.settings');
+  $config->set('minify_html', $form_state['values']['minify_html']);
+  $config->set('minify_js', $form_state['values']['minify_js']);
+  $config->save();
 }
 
 /**
@@ -103,10 +119,11 @@ function minify_form_system_performance_settings_alter(&$form, &$form_state, $fo
  */
 function minify_process_html(&$variables) {
   global $theme;
-  $theme_default = variable_get('theme_default', null);
+  $theme_default = config_get('system.core', 'theme_default');
 
   /* Check Monify HTML is selected and it is for front end theme */
-  if (intval(variable_get('minify_html', 0)) && $theme == $theme_default) {
+  $minify_html = config_get('minify.settings', 'minify_html');
+  if (intval($minify_html) && $theme == $theme_default) {
     /* Constant used as replacement tag key in global placeholders array */
     define('REPLACEMENT_HASH', 'MINIFYHTML' . md5($_SERVER['REQUEST_TIME']));
     /* Get active theme regions */
@@ -127,7 +144,6 @@ function minify_process_html(&$variables) {
  * Helper function to minify HTML
  */
 function _minify_html($buffer) {
-
   /* Replace <textarea> with placeholder */
   $buffer = preg_replace_callback('/\\s*<textarea(\\b[^>]*?>[\\s\\S]*?<\\/textarea>)\\s*/i', '_minify_html_callback', $buffer);
 
@@ -244,16 +260,17 @@ function _minify_reserve_place($content) {
  * Implements hook_js_alter().
  */
 function minify_js_alter(&$scripts) {
-  $minify_js = variable_get('minify_js', 0);
+  $config = config('minify.settings');
+  $minify_js = $config->get('minify_js');
   if (!$minify_js) {
     return;
   }
 
-  $cache = variable_get('minify_captured_js', array());
+  $cache = $config->get('minify_captured_js');
 
   $updated = false;
   foreach ($scripts as $file_path => $file_details) {
-    if ('file' == $file_details['type'] && is_file(drupal_realpath($file_path))) {
+    if ('file' == $file_details['type'] && is_file(backdrop_realpath($file_path))) {
       /* Handle URI paths */
       if ($wrapper = file_stream_wrapper_get_instance_by_uri($file_path)) {
         $file_path = $wrapper->getDirectoryPath() . '/' . file_uri_target($file_path);
@@ -263,7 +280,7 @@ function minify_js_alter(&$scripts) {
       if (!_minify_javascript_exist($file_path, $cache)) {
         $updated = true;
         $cache[$file_path]['file_path'] = $file_path;
-        $cache[$file_path]['file_name'] = drupal_basename($file_path);
+        $cache[$file_path]['file_name'] = backdrop_basename($file_path);
         $cache[$file_path]['version'] = isset($file_details['version']) ? $file_details['version'] : '';
         $cache[$file_path]['minified_file_path'] = null;
         $cache[$file_path]['minified_size'] = 0;
@@ -272,17 +289,18 @@ function minify_js_alter(&$scripts) {
         $cache[$file_path]['error'] = false;
         $cache[$file_path]['error_msg'] = null;
         $cache[$file_path]['skip'] = false;
-        $cache[$file_path]['md5'] = md5_file(drupal_realpath($file_path));
+        $cache[$file_path]['md5'] = md5_file(backdrop_realpath($file_path));
       }
     }
   }
 
   /* If any change in existing array update cache */
   if ($updated) {
-    variable_set('minify_captured_js', $cache);
+    $config->set('minify_captured_js', $cache);
+    $config->save();
   }
 
-  if (intval(variable_get('minify_js', 0))) {
+  if (intval($config->get('minify_js'))) {
     /* Replace the JavaScript path by minified path into $scripts without changing the order */
     foreach ($cache as $key => $value) {
       if (isset($scripts[$key]) && $value['status']) {
@@ -303,7 +321,9 @@ function minify_js_alter(&$scripts) {
  *  File array to search JavaScript
  */
 function _minify_javascript_exist($search_value, $cache) {
-  return array_key_exists($search_value, $cache);
+  if (is_array($cache) && !empty($cache)) {
+    return array_key_exists($search_value, $cache);
+  }
 }
 
 /*

@@ -6,7 +6,7 @@
 function minify_js_callback() {
   _minify_clear_invalid_cache();
 
-  $cache = variable_get('minify_captured_js', array());
+  $cache = config_get('minify.settings', 'minify_captured_js');
 
   $options = array();
   if (!empty($cache)) {
@@ -43,12 +43,14 @@ function minify_js_callback() {
     '#options' => $options,
     '#empty' => '<b>' . t('JavaScript files not found, please visit some random pages at front end to capture JavaScript files.') . '</b>',
   );
-  $form['minify'] = array(
+
+  $form['actions'] = array('#type' => 'actions');
+  $form['actions']['minify'] = array(
     '#type' => 'submit',
     '#value' => t('Minify'),
     '#submit' => array('minify_js_submit'),
   );
-  $form['clear_minify_cache'] = array(
+  $form['actions']['clear_minify_cache'] = array(
     '#type' => 'submit',
     '#value' => t('Clear minify cache'),
     '#submit' => array('minify_clear_js_cache'),
@@ -57,10 +59,52 @@ function minify_js_callback() {
 }
 
 /**
+ * Menu cminify_settings_submitallback function to remove minified js from cache
+ */
+function minify_js_revert_callback() {
+  $cache_data = config_get('minify.settings', 'minify_captured_js');
+  if (!empty($cache_data)) {
+    $key = $_GET['file'];
+    if (isset($cache_data[$key])) {
+      /* Reset cache data record to prevent use of minified js */
+      $minified_file_path = $cache_data[$key]['minified_file_path'];
+      $cache_data[$key]['minified_file_path'] = null;
+      $cache_data[$key]['minified_size'] = 0;
+      $cache_data[$key]['status'] = false;
+      $cache_data[$key]['last_minify_at'] = 0;
+      $cache_data[$key]['error'] = false;
+      $cache_data[$key]['error_msg'] = null;
+      $cache_data[$key]['skip'] = false;
+      $cache_data[$key]['md5'] = null;
+
+      config_set('minify.settings', 'minify_captured_js', $cache_data);
+
+      /* delete the file */
+      backdrop_unlink($minified_file_path);
+
+      $file_name = $cache_data[$key]['file_name'];
+      watchdog('minify', '%file_name reverted successfully.', array('%file_name' => $file_name), WATCHDOG_NOTICE);
+      backdrop_set_message(t('%file_name reverted successfully.', array('%file_name' => $file_name)));
+    }
+  }
+  backdrop_goto('admin/config/development/performance/minifyjs');
+}
+
+/**
+ * Menu callback function to regenerate minified js
+ */
+function minify_js_refresh_callback() {
+  $file = $_GET['file'];
+  $cache_data = config_get('minify.settings', 'minify_captured_js');
+  _minify_process_minify($file, $cache_data);
+  backdrop_goto('admin/config/development/performance/minifyjs');
+}
+
+/**
  * Helper function to check file is updated or not, using file content MD5
  */
 function _minify_is_file_updated($details) {
-  $md5 = md5_file(drupal_realpath($details['file_path']));
+  $md5 = md5_file(backdrop_realpath($details['file_path']));
   if ($details['md5'] != $md5 && $details['status']) {
     return true;
   } else {
@@ -112,7 +156,7 @@ function _minify_operation_links($details) {
  * Helper function to get original file size
  */
 function _minify_original_file_size($details) {
-  $file_size = filesize(drupal_realpath($details['file_path']));
+  $file_size = filesize(backdrop_realpath($details['file_path']));
   if ($details['file_updated']) {
     return '<span class="marker">' . _minify_format_file_size($file_size) . '</span>';
   } else {
@@ -121,7 +165,7 @@ function _minify_original_file_size($details) {
 }
 
 /**
- * Function to sort multidimensional array by column
+ * Helper function to sort multidimensional array by column.
  */
 function _minify_sort_array_by_column(&$arr, $col, $dir = SORT_ASC) {
   $sort_col = array();
@@ -132,7 +176,7 @@ function _minify_sort_array_by_column(&$arr, $col, $dir = SORT_ASC) {
 }
 
 /**
- * Function to convert file size in human readable form
+ * Helper function to convert file size in human readable form.
  */
 function _minify_format_file_size($f_size) {
   if(0 == $f_size) {
@@ -148,7 +192,7 @@ function _minify_format_file_size($f_size) {
 }
 
 /**
- * Function to return file status
+ * Helper function to return file status.
  */
 function _minify_file_status($details) {
   if ($details['file_updated'] && $details['status']) {
@@ -162,7 +206,7 @@ function _minify_file_status($details) {
 }
 
 /**
- * Submit function to handle overview for submission
+ * Submit function to handle overview for submission.
  */
 function minify_js_submit($form, &$form_state) {
 
@@ -178,7 +222,7 @@ function minify_js_submit($form, &$form_state) {
     'title' => t('Minify'),
     'init_message' => t('Minify starting.'),
     'operations' => $operations,
-    'file' => drupal_get_path('module', 'minify') . '/' . 'minify.admin.inc',
+    'file' => backdrop_get_path('module', 'minify') . '/' . 'minify.admin.inc',
   );
 
   batch_set($batch);
@@ -192,7 +236,7 @@ function minify_js_submit($form, &$form_state) {
  * Function to execute minify batch process
  */
 function minify_batch_process($script, &$context) {
-  $cache_data = variable_get('minify_captured_js', array());
+  $cache_data = config_get('minify.settings', 'minify_captured_js');
 
   $info = pathinfo($script);
   $context['message'] = t('Now processing <i>@file_name</i>', array('@file_name' => $info['basename']));
@@ -204,22 +248,22 @@ function minify_batch_process($script, &$context) {
  * Submit callback to clear captured data
  */
 function minify_clear_js_cache($form, &$form_state) {
-  $minify_dir = variable_get('file_public_path', conf_path() . '/files') . '/minify';
+  $minify_dir = config_get('system.core', 'file_public_path') . '/minify';
   $files = file_scan_directory($minify_dir, '/.*\.*$/');
   foreach ($files as $key => $value) {
-    drupal_unlink($key);
+    backdrop_unlink($key);
   }
-  variable_del('minify_captured_js');
+  config_clear('minify.settings', 'minify_captured_js');
   watchdog('minify', 'Minify cache cleared.', array(), WATCHDOG_NOTICE);
-  drupal_set_message(t('Minify cache cleared.'));
-  drupal_goto('admin/config/development/performance/minifyjs');
+  backdrop_set_message(t('Minify cache cleared.'));
+  backdrop_goto('admin/config/development/performance/minifyjs');
 }
 
 /**
  * Helper function to process minify call
  */
 function _minify_process_minify($script, &$cache_data) {
-  $js_code = urlencode(trim(file_get_contents(drupal_realpath($script))));
+  $js_code = urlencode(trim(file_get_contents(backdrop_realpath($script))));
   $post_data = _minify_get_post_fields($js_code);
   $response = _minify_send_request($post_data);
   if (isset($response['response'])) {
@@ -230,7 +274,7 @@ function _minify_process_minify($script, &$cache_data) {
       if (file_put_contents($min_js_path, $response_obj->compiledCode)) {
 
         watchdog('minify', '%old_path minified successfully as %new_path.', array('%old_path' => $script, '%new_path' => $min_js_path), WATCHDOG_NOTICE);
-        drupal_set_message(t('%file_name minified successfully.', array('%file_name' => $cache_data[$script]['file_name'])));
+        backdrop_set_message(t('%file_name minified successfully.', array('%file_name' => $cache_data[$script]['file_name'])));
 
         $cache_data[$script]['minified_file_path'] = $min_js_path;
         $cache_data[$script]['minified_size'] = $response_obj->statistics->compressedSize;
@@ -238,7 +282,7 @@ function _minify_process_minify($script, &$cache_data) {
         $cache_data[$script]['last_minify_at'] = time();
         $cache_data[$script]['error'] = false;
         $cache_data[$script]['error_msg'] = null;
-        $cache_data[$script]['md5'] = md5_file(drupal_realpath($script));
+        $cache_data[$script]['md5'] = md5_file(backdrop_realpath($script));
       } //File save if end
     } else if (isset($response_obj->warnings)) {
       $warning = $response_obj->warnings[0]->warning;
@@ -254,7 +298,7 @@ function _minify_process_minify($script, &$cache_data) {
     }
 
     /* Update the cache */
-    variable_set('minify_captured_js', $cache_data);
+    config_set('minify.settings', 'minify_captured_js', $cache_data);
 
   } // Response isset if end
 }
@@ -286,7 +330,7 @@ function _minify_send_request($post_data) {
     'data' => $post_data,
     'headers' => array('Content-Type' => 'application/x-www-form-urlencoded'),
   );
-  $result = drupal_http_request('http://closure-compiler.appspot.com/compile', $options);
+  $result = backdrop_http_request('http://closure-compiler.appspot.com/compile', $options);
   if (!isset($result->error)) {
     $response = json_decode($result->data);
     $httpcode = $result->code;
@@ -303,9 +347,9 @@ function _minify_construct_min_js_path($script, $cache_data) {
     return $cache_data[$script]['minified_file_path'];
   } else {
     /* Not minified file */
-    $minify_js_dir = variable_get('file_public_path', conf_path() . '/files') . '/minify/';
+    $minify_js_dir = config_get('system.core', 'file_public_path', conf_path() . '/files') . '/minify/';
     if (!is_dir($minify_js_dir)) {
-      drupal_mkdir($minify_js_dir);
+      backdrop_mkdir($minify_js_dir);
     }
 
     $version = $cache_data[$script]['version'];
@@ -323,61 +367,23 @@ function _minify_construct_min_js_path($script, $cache_data) {
 }
 
 /**
- * Helper function to remove minified js from cache
- */
-function _minify_js_revert_callback() {
-  $cache_data = variable_get('minify_captured_js', array());
-  if (!empty($cache_data)) {
-    $key = $_GET['file'];
-    if (isset($cache_data[$key])) {
-      /* Reset cache data record to prevent use of minified js */
-      $minified_file_path = $cache_data[$key]['minified_file_path'];
-      $cache_data[$key]['minified_file_path'] = null;
-      $cache_data[$key]['minified_size'] = 0;
-      $cache_data[$key]['status'] = false;
-      $cache_data[$key]['last_minify_at'] = 0;
-      $cache_data[$key]['error'] = false;
-      $cache_data[$key]['error_msg'] = null;
-      $cache_data[$key]['skip'] = false;
-      $cache_data[$key]['md5'] = null;
-
-      variable_set('minify_captured_js', $cache_data);
-
-      /* delete the file */
-      drupal_unlink($minified_file_path);
-
-      $file_name = $cache_data[$key]['file_name'];
-      watchdog('minify', '%file_name reverted successfully.', array('%file_name' => $file_name), WATCHDOG_NOTICE);
-      drupal_set_message(t('%file_name reverted successfully.', array('%file_name' => $file_name)));
-    }
-  }
-  drupal_goto('admin/config/development/performance/minifyjs');
-}
-
-/**
- * Helper function to regenerate minified js
- */
-function _minify_js_refresh_callback() {
-  $file = $_GET['file'];
-  $cache_data = variable_get('minify_captured_js', array());
-  _minify_process_minify($file, $cache_data);
-  drupal_goto('admin/config/development/performance/minifyjs');
-}
-
-/**
  * Helper function to clear invalid cache
  *  check original file is exist or not
  *  if not, delete minified file and remove record from cache
  */
 function _minify_clear_invalid_cache() {
-  $cache = variable_get('minify_captured_js', array());
-  foreach ($cache as $key => $value) {
-    if (!file_exists($key)) {
-      if (file_exists($value['minified_file_path'])) {
-        drupal_unlink($value['minified_file_path']);
+  $config = config('minify.settings');
+  $cache = $config->get('minify_captured_js');
+  if (is_array($cache) && !empty($cache)) {
+    foreach ($cache as $key => $value) {
+      if (!file_exists($key)) {
+        if (file_exists($value['minified_file_path'])) {
+          backdrop_unlink($value['minified_file_path']);
+        }
+        unset($cache[$key]);
       }
-      unset($cache[$key]);
     }
   }
-  variable_set('minify_captured_js', $cache);
+  $config->set('minify_captured_js', $cache);
+  $config->save();
 }
