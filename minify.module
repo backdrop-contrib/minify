@@ -248,7 +248,7 @@ function minify_js_alter(&$scripts) {
 
   $updated = false;
   foreach ($scripts as $file_path => $file_details) {
-    if ('file' == $file_details['type']) {
+    if ('file' == $file_details['type'] && is_file(drupal_realpath($file_path))) {
       /* Set JavaScript entry into cache array if it not exist in cache */
       if (!_minify_javascript_exist($file_path, $cache)) {
         $updated = true;
