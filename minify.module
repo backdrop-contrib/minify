@@ -104,7 +104,7 @@ function minify_form_system_performance_settings_alter(&$form, &$form_state, $fo
 function minify_process_html(&$variables) {
   global $theme;
   $theme_default = variable_get('theme_default', null);
-  
+
   /* Check Monify HTML is selected and it is for front end theme */
   if (intval(variable_get('minify_html', 0)) && $theme == $theme_default) {
     /* Constant used as replacement tag key in global placeholders array */
@@ -137,12 +137,12 @@ function _minify_html($buffer) {
   /* Replace <iframe> with placeholder */
   $buffer = preg_replace_callback('/\\s*<iframe(\\b[^>]*?>[\\s\\S]*?<\\/iframe>)\\s*/i', '_minify_html_iframe_callback', $buffer);
 
-  /* Replace <script> with placeholder */ 
+  /* Replace <script> with placeholder */
   $buffer = preg_replace_callback('/\\s*<script(\\b[^>]*?>[\\s\\S]*?<\\/script>)\\s*/i', '_minify_html_script_callback', $buffer);
 
   /* Replace <style> with placeholder */
   $buffer = preg_replace_callback('/\\s*<style(\\b[^>]*?>[\\s\\S]*?<\\/style>)\\s*/i', '_minify_html_style_callback', $buffer);
-  
+
   /* Remove HTML comment */
   $buffer = preg_replace_callback('/<!--([\\s\\S]*?)-->/', '_minify_html_html_comment', $buffer);
 
@@ -212,7 +212,7 @@ function _minify_html_script_callback($m) {
   );
   $replace = array('', "\n", "\n");
   $script = preg_replace($search, $replace, $m[0]);
-  
+
   return _minify_reserve_place($script);
 }
 
@@ -249,6 +249,11 @@ function minify_js_alter(&$scripts) {
   $updated = false;
   foreach ($scripts as $file_path => $file_details) {
     if ('file' == $file_details['type'] && is_file(drupal_realpath($file_path))) {
+      /* Handle URI paths */
+      if ($wrapper = file_stream_wrapper_get_instance_by_uri($file_path)) {
+        $file_path = $wrapper->getDirectoryPath() . '/' . file_uri_target($file_path);
+      }
+
       /* Set JavaScript entry into cache array if it not exist in cache */
       if (!_minify_javascript_exist($file_path, $cache)) {
         $updated = true;
@@ -290,7 +295,7 @@ function minify_js_alter(&$scripts) {
  *  JavaScript file name to search into array
  *
  * @param $cache
- *  File array to search JavaScript 
+ *  File array to search JavaScript
  */
 function _minify_javascript_exist($search_value, $cache) {
   return array_key_exists($search_value, $cache);
