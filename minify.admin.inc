@@ -377,7 +377,9 @@ function _minify_clear_invalid_cache() {
   $cache = variable_get('minify_captured_js', array());
   foreach ($cache as $key => $value) {
     if (!file_exists($key)) {
-      drupal_unlink($value['minified_file_path']);
+      if (file_exists($value['minified_file_path'])) {
+        drupal_unlink($value['minified_file_path']);
+      }
       unset($cache[$key]);
     }
   }
